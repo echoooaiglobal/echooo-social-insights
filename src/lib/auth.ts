@@ -12,11 +12,11 @@ const storage = new Storage()
  */
 export async function checkAuthentication(): Promise<boolean> {
   try {
-    // Check if we have cached dashboard auth data
+    // First check storage directly
     const dashboardAuth = await storage.get('dashboardAuth')
     
     if (!dashboardAuth || !dashboardAuth.accessToken) {
-      console.log('❌ No cached dashboard auth found')
+      console.log('❌ No cached dashboard auth foundddd')
       return false
     }
 
@@ -54,33 +54,25 @@ export async function syncUserData(): Promise<UserData | null> {
     const userData = JSON.parse(dashboardAuth.user)
     const companyData = dashboardAuth.company ? JSON.parse(dashboardAuth.company) : null
 
-    const extensionUserData: UserData = {
+    // Create formatted user data
+    const formattedUserData: UserData = {
       id: userData.id,
-      fullName: userData.full_name || userData.first_name + ' ' + userData.last_name || 'User',
+      fullName: userData.full_name || 
+                (userData.first_name && userData.last_name ? 
+                 `${userData.first_name} ${userData.last_name}` : 
+                 userData.email || 'User'),
       email: userData.email,
       companyName: companyData?.name || 'Company',
       isAuthenticated: true,
       lastUpdated: Date.now()
     }
 
-    // Save to extension storage
-    await storage.set('userData', extensionUserData)
+    // Cache in extension storage
+    await storage.set('userData', formattedUserData)
     
-    // Also try to get campaigns (mock data for now, you can add real API call later)
-    const mockCampaigns = [
-      {
-        id: '1',
-        name: 'Sample Campaign',
-        status: 'active',
-        createdAt: new Date().toISOString()
-      }
-    ]
-    
-    const { saveCampaigns } = await import('./storage')
-    await saveCampaigns(mockCampaigns)
+    console.log('✅ User data synced:', formattedUserData)
+    return formattedUserData
 
-    console.log('✅ User data synced successfully:', extensionUserData)
-    return extensionUserData
   } catch (error) {
     console.error('❌ Failed to sync user data:', error)
     return null
@@ -88,43 +80,7 @@ export async function syncUserData(): Promise<UserData | null> {
 }
 
 /**
- * Open dashboard login page in new tab
- */
-export async function openLoginPage(): Promise<void> {
-  try {
-    return new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage({ type: 'OPEN_LOGIN' }, (response) => {
-        if (response?.success) {
-          console.log('✅ Login page opened')
-          resolve()
-        } else {
-          reject(new Error(response?.error || 'Failed to open login page'))
-        }
-      })
-    })
-  } catch (error) {
-    console.error('❌ Failed to open login page:', error)
-    throw error
-  }
-}
-
-/**
- * Logout user and clear all data
- */
-export async function logout(): Promise<void> {
-  try {
-    // Clear extension storage
-    await storage.clear()
-    
-    console.log('✅ Extension logged out successfully')
-  } catch (error) {
-    console.error('❌ Failed to logout:', error)
-    throw error
-  }
-}
-
-/**
- * Get cached user data with optional refresh
+ * Get cached user data
  */
 export async function getCachedUserData(forceRefresh = false): Promise<UserData | null> {
   try {
@@ -132,35 +88,68 @@ export async function getCachedUserData(forceRefresh = false): Promise<UserData 
       return await syncUserData()
     }
 
-    // Check if we have recent cached data (less than 5 minutes old)
+    // Try to get from cache first
     const cachedData = await storage.get('userData')
-    if (cachedData) {
-      const fiveMinutesAgo = Date.now() - (5 * 60 * 1000)
-      if (cachedData.lastUpdated > fiveMinutesAgo) {
-        return cachedData
-      }
+    
+    if (cachedData && cachedData.isAuthenticated) {
+      console.log('📄 Using cached user data')
+      return cachedData
     }
 
-    // Data is stale or doesn't exist, try to sync from dashboard auth
+    // If no cache, try to sync
+    console.log('🔄 No cached data, attempting sync...')
     return await syncUserData()
+    
   } catch (error) {
-    console.error('❌ Failed to get user data:', error)
+    console.error('❌ Failed to get cached user data:', error)
     return null
   }
 }
 
 /**
- * Request dashboard auth sync (triggers content script to send fresh data)
+ * Open login page
  */
-export async function requestDashboardSync(): Promise<boolean> {
+export async function openLoginPage(): Promise<void> {
   try {
-    return new Promise((resolve) => {
-      chrome.runtime.sendMessage({ type: 'SYNC_DATA' }, (response) => {
-        resolve(response?.success || false)
-      })
-    })
+    const dashboardUrl = process.env.PLASMO_PUBLIC_DASHBOARD_URL || 'http://localhost:3000'
+    const loginUrl = `${dashboardUrl}/login`
+    
+    await chrome.tabs.create({ url: loginUrl })
+    console.log('🔗 Login page opened')
   } catch (error) {
-    console.error('❌ Failed to request dashboard sync:', error)
+    console.error('❌ Failed to open login page:', error)
+    throw error
+  }
+}
+
+/**
+ * Logout - clear all cached data
+ */
+export async function logout(): Promise<void> {
+  try {
+    await storage.remove('dashboardAuth')
+    await storage.remove('userData')
+    console.log('🚪 Logged out successfully')
+  } catch (error) {
+    console.error('❌ Failed to logout:', error)
+    throw error
+  }
+}
+
+/**
+ * Check if dashboard is accessible (user is on dashboard domain)
+ */
+export async function isDashboardAccessible(): Promise<boolean> {
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true })
+    const currentTab = tabs[0]
+    
+    if (!currentTab?.url) return false
+    
+    const dashboardUrl = process.env.PLASMO_PUBLIC_DASHBOARD_URL || 'http://localhost:3000'
+    return currentTab.url.startsWith(dashboardUrl)
+  } catch (error) {
+    console.error('❌ Failed to check dashboard accessibility:', error)
     return false
   }
 }

@@ -37,7 +37,7 @@ export function LoginButton({ onLogin, loading = false }: LoginButtonProps) {
         marginBottom: '8px',
         margin: 0
       }}>
-        Connect to Dashboard
+        Connect to Dashboard3
       </h2>
       
       <p style={{
