@@ -10,6 +10,8 @@
     "package": "plasmo package"
   },
   "dependencies": {
+    "@plasmohq/messaging": "^0.7.2",
+    "@plasmohq/storage": "^1.15.0",
     "plasmo": "0.90.5",
     "react": "18.2.0",
     "react-dom": "18.2.0"
@@ -25,7 +27,32 @@
   },
   "manifest": {
     "host_permissions": [
-      "https://*/*"
+      "https://yourdashboard.com/*",
+      "https://api.yourdashboard.com/*",
+      "http://localhost:3000/*",
+      "http://localhost:8000/*"
+    ],
+    "permissions": [
+      "storage",
+      "cookies",
+      "activeTab",
+      "scripting"
+    ],
+    "action": {
+      "default_popup": "popup.html",
+      "default_title": "Echooo Dashboard"
+    },
+    "content_scripts": [
+      {
+        "matches": [
+          "http://localhost:3000/*",
+          "https://yourdashboard.com/*"
+        ],
+        "js": [
+          "contents/dashboard.ts"
+        ],
+        "run_at": "document_end"
+      }
     ]
   }
 }
