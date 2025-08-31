@@ -1,7 +1,5 @@
 // src/lib/auth.ts
-// Authentication utilities for extension
-// Updated to work with dashboard localStorage via content script
-
+// Fixed authentication utilities - simple and reliable
 import { Storage } from "@plasmohq/storage"
 import type { UserData } from './storage'
 
@@ -12,11 +10,11 @@ const storage = new Storage()
  */
 export async function checkAuthentication(): Promise<boolean> {
   try {
-    // First check storage directly
+    // Check storage directly - no proactive checking to avoid infinite loops
     const dashboardAuth = await storage.get('dashboardAuth')
     
     if (!dashboardAuth || !dashboardAuth.accessToken) {
-      console.log('❌ No cached dashboard auth foundddd')
+      console.log('❌ No cached dashboard auth found')
       return false
     }
 
@@ -62,7 +60,7 @@ export async function syncUserData(): Promise<UserData | null> {
                  `${userData.first_name} ${userData.last_name}` : 
                  userData.email || 'User'),
       email: userData.email,
-      companyName: companyData?.name || 'Company',
+      companyName: companyData?.name || companyData?.domain || 'Company',
       isAuthenticated: true,
       lastUpdated: Date.now()
     }
@@ -103,6 +101,33 @@ export async function getCachedUserData(forceRefresh = false): Promise<UserData 
   } catch (error) {
     console.error('❌ Failed to get cached user data:', error)
     return null
+  }
+}
+
+/**
+ * Manual refresh - triggers background script to check dashboard
+ */
+export async function refreshAuthFromDashboard(): Promise<boolean> {
+  try {
+    console.log('🔄 Manually triggering dashboard auth check...')
+    
+    // Send message to background to check auth
+    const response = await chrome.runtime.sendMessage({
+      type: 'TRIGGER_AUTH_CHECK'
+    })
+    
+    console.log('📨 Refresh response:', response)
+    
+    // Wait briefly for background processing
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    
+    // Check if we now have auth data
+    const authStatus = await checkAuthentication()
+    return authStatus
+    
+  } catch (error) {
+    console.error('❌ Failed to refresh auth from dashboard:', error)
+    return false
   }
 }
 
@@ -151,5 +176,17 @@ export async function isDashboardAccessible(): Promise<boolean> {
   } catch (error) {
     console.error('❌ Failed to check dashboard accessibility:', error)
     return false
+  }
+}
+
+/**
+ * Debug function to see all extension storage
+ */
+export async function debugStorage(): Promise<void> {
+  try {
+    const all = await storage.getAll()
+    console.log('🔍 ALL EXTENSION STORAGE:', all)
+  } catch (error) {
+    console.error('❌ Debug storage failed:', error)
   }
 }

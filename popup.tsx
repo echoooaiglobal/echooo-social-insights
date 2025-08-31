@@ -4,41 +4,16 @@ import { LoginButton } from './src/popup/components/LoginButton'
 import { LoadingSpinner } from './src/popup/components/LoadingSpinner'
 import { UserProfile } from './src/popup/components/UserProfile'
 import { CampaignSelector } from './src/popup/components/CampaignSelector'
-import { checkAuthentication, getCachedUserData, logout, openLoginPage } from './src/lib/auth'
+import { checkAuthentication, getCachedUserData, logout, openLoginPage, refreshAuthFromDashboard } from './src/lib/auth'
 import type { UserData } from './src/lib/storage'
 import './src/popup/styles.css'
-
-// Force popup size on component mount
-React.useLayoutEffect = React.useLayoutEffect || React.useEffect
 
 function IndexPopup() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [userData, setUserData] = useState<UserData | null>(null)
   const [loading, setLoading] = useState(true)
   const [loginLoading, setLoginLoading] = useState(false)
-
-  // Force popup dimensions
-  React.useLayoutEffect(() => {
-    const forceSize = () => {
-      document.body.style.width = '350px'
-      document.body.style.height = '500px'
-      document.body.style.minWidth = '350px'
-      document.body.style.maxWidth = '350px'
-      document.body.style.overflow = 'hidden'
-      
-      const plasmoRoot = document.getElementById('__plasmo')
-      if (plasmoRoot) {
-        plasmoRoot.style.width = '350px'
-        plasmoRoot.style.height = '500px'
-        plasmoRoot.style.minWidth = '350px'
-        plasmoRoot.style.maxWidth = '350px'
-      }
-    }
-    
-    forceSize()
-    setTimeout(forceSize, 100) // Retry after 100ms
-    setTimeout(forceSize, 500) // Retry after 500ms
-  }, [])
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     initializePopup()
@@ -48,7 +23,7 @@ function IndexPopup() {
     try {
       console.log('🚀 Initializing popup...')
       
-      // Check authentication status
+      // Check authentication status (simple, no proactive checking)
       const authStatus = await checkAuthentication()
       setIsAuthenticated(authStatus)
       
@@ -81,6 +56,31 @@ function IndexPopup() {
     }
   }
 
+  const handleRefresh = async () => {
+    try {
+      setRefreshing(true)
+      console.log('🔄 Manual refresh triggered by user')
+      
+      // Trigger background auth check
+      const authFound = await refreshAuthFromDashboard()
+      
+      if (authFound) {
+        console.log('✅ Auth found after refresh')
+        setIsAuthenticated(true)
+        const userData = await getCachedUserData()
+        setUserData(userData)
+      } else {
+        console.log('❌ No auth found after refresh')
+        setIsAuthenticated(false)
+        setUserData(null)
+      }
+    } catch (error) {
+      console.error('❌ Failed to refresh:', error)
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
   const handleLogout = async () => {
     try {
       await logout()
@@ -91,7 +91,7 @@ function IndexPopup() {
     }
   }
 
-  const handleRefresh = async () => {
+  const handleDataRefresh = async () => {
     try {
       setLoading(true)
       const refreshedData = await getCachedUserData(true) // Force refresh
@@ -119,7 +119,7 @@ function IndexPopup() {
     flexDirection: 'column'
   }
 
-  // Show loading spinner while initializing
+  // Show loading spinner while initializing (but not forever)
   if (loading && isAuthenticated === null) {
     return (
       <div style={containerStyle}>
@@ -132,7 +132,12 @@ function IndexPopup() {
   if (!isAuthenticated) {
     return (
       <div style={containerStyle}>
-        <LoginButton onLogin={handleLogin} loading={loginLoading} />
+        <LoginButton 
+          onLogin={handleLogin} 
+          onRefresh={handleRefresh}
+          loading={loginLoading}
+          refreshing={refreshing}
+        />
       </div>
     )
   }
@@ -161,7 +166,7 @@ function IndexPopup() {
             Echooo Dashboard
           </h1>
           <button
-            onClick={handleRefresh}
+            onClick={handleDataRefresh}
             style={{
               padding: '4px',
               background: 'rgba(255, 255, 255, 0.1)',
