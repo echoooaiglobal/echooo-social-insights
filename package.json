@@ -29,13 +29,27 @@
   "manifest": {
     "host_permissions": [
       "http://localhost:3000/*",
-      "http://localhost:8000/*"
+      "http://localhost:8000/*",
+      "https://www.instagram.com/*",
+      "https://instagram.com/*"
     ],
     "permissions": [
       "storage",
       "cookies",
       "activeTab",
       "scripting"
+    ],
+    "content_scripts": [
+      {
+        "matches": ["http://localhost:3000/*"],
+        "js": ["../contents/dashboard.ts"],
+        "run_at": "document_end"
+      },
+      {
+        "matches": ["https://www.instagram.com/*", "https://instagram.com/*"], 
+        "js": ["../contents/instagram.ts"],
+        "run_at": "document_end"
+      }
     ],
     "action": {
       "default_popup": "popup.html",
