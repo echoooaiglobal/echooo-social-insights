@@ -1,4 +1,4 @@
-// contents/instagram.ts - Debug version
+// contents/instagram.ts
 import type { PlasmoCSConfig } from "plasmo"
 
 export const config: PlasmoCSConfig = {
@@ -9,12 +9,14 @@ export const config: PlasmoCSConfig = {
   run_at: "document_end"
 }
 
-console.log("🔍 [DEBUG] Instagram content script loaded on:", window.location.href)
+console.log("🚀 [DEBUG] Instagram content script loaded!")
+console.log("📍 [DEBUG] Current URL:", window.location.href)
 
 interface InstagramProfile {
   username: string
   displayName: string
   bio: string
+  location?: string
   profilePicture: string
   followers: string
   following: string
@@ -25,247 +27,159 @@ interface InstagramProfile {
   lastUpdated: number
 }
 
-let currentProfile: InstagramProfile | null = null
-let profileCheckInterval: NodeJS.Timeout | null = null
-
-// Start monitoring immediately
-setTimeout(() => {
-  console.log("🔍 [DEBUG] Starting profile monitoring after 2 seconds...")
-  startProfileMonitoring()
-}, 2000)
-
-function startProfileMonitoring() {
-  console.log("🔄 [DEBUG] Profile monitoring started")
-  
-  // Check immediately
-  checkForProfile()
-  
-  // Set up periodic checking
-  if (profileCheckInterval) {
-    clearInterval(profileCheckInterval)
-  }
-  
-  profileCheckInterval = setInterval(() => {
-    console.log("⏰ [DEBUG] Periodic profile check...")
-    checkForProfile()
-  }, 3000) // Check every 3 seconds
-  
-  // Monitor URL changes
-  let lastUrl = location.href
-  new MutationObserver(() => {
-    const url = location.href
-    if (url !== lastUrl) {
-      lastUrl = url
-      console.log("🌐 [DEBUG] URL changed to:", url)
-      setTimeout(checkForProfile, 1500)
-    }
-  }).observe(document, { subtree: true, childList: true })
-}
-
-function checkForProfile() {
-  console.log("🔍 [DEBUG] Checking for profile...")
-  console.log("📍 [DEBUG] Current URL:", window.location.href)
-  
-  try {
-    // Check if we're on a profile page
-    const isProfile = isProfilePage()
-    console.log("✅ [DEBUG] Is profile page:", isProfile)
-    
-    if (!isProfile) {
-      if (currentProfile) {
-        console.log("❌ [DEBUG] Left profile page")
-        currentProfile = null
-        sendProfileToExtension(null)
-      }
-      return
-    }
-
-    // Extract profile data with detailed logging
-    const profile = extractProfileData()
-    console.log("📊 [DEBUG] Extracted profile:", profile)
-    
-    if (profile && profile.username) {
-      // Check if profile changed
-      if (!currentProfile || currentProfile.username !== profile.username) {
-        console.log("✅ [DEBUG] New profile detected:", profile.username)
-        currentProfile = profile
-        sendProfileToExtension(profile)
-      } else {
-        console.log("📝 [DEBUG] Same profile, no update needed")
-      }
-    } else {
-      console.log("❌ [DEBUG] No valid profile extracted")
-    }
-  } catch (error) {
-    console.error("❌ [DEBUG] Error in checkForProfile:", error)
-  }
-}
-
-function isProfilePage(): boolean {
-  const url = window.location.href
-  console.log("🔍 [DEBUG] Checking URL:", url)
-  
-  // Check URL pattern
-  const profilePattern = /^https:\/\/(www\.)?instagram\.com\/([^\/\?]+)\/?(\?.*)?$/
-  const matches = profilePattern.test(url)
-  console.log("🔍 [DEBUG] URL pattern matches:", matches)
-  
-  if (!matches) {
-    return false
-  }
+function extractSimpleProfile(): InstagramProfile | null {
+  console.log("🔍 [DEBUG] Extracting Instagram profile...")
   
   // Get username from URL
   const urlMatch = window.location.pathname.match(/^\/([^\/\?]+)/)
   const username = urlMatch ? urlMatch[1] : ''
-  console.log("🔍 [DEBUG] Username from URL:", username)
   
-  // Check for excluded paths
-  const excludedPaths = ['explore', 'reels', 'accounts', 'direct', 'p', 'stories', 'tv']
-  const isExcluded = excludedPaths.includes(username)
-  console.log("🔍 [DEBUG] Is excluded path:", isExcluded)
+  console.log("👤 [DEBUG] Username from URL:", username)
   
-  if (isExcluded) {
-    return false
-  }
-  
-  // Look for profile elements with detailed logging
-  console.log("🔍 [DEBUG] Looking for profile elements...")
-  
-  const selectors = [
-    'header section',
-    '[data-testid="user-avatar"]',
-    'img[data-testid="user-avatar"]',
-    'main header',
-    'article header'
-  ]
-  
-  for (const selector of selectors) {
-    const element = document.querySelector(selector)
-    console.log(`🔍 [DEBUG] Selector "${selector}":`, !!element)
-    if (element) {
-      return true
-    }
-  }
-  
-  console.log("❌ [DEBUG] No profile elements found")
-  return false
-}
-
-function extractProfileData(): InstagramProfile | null {
-  console.log("🔍 [DEBUG] Starting profile data extraction...")
-  
-  try {
-    // Get username from URL
-    const urlMatch = window.location.pathname.match(/^\/([^\/\?]+)/)
-    const username = urlMatch ? urlMatch[1] : ''
-    console.log("👤 [DEBUG] Username:", username)
-    
-    if (!username) {
-      console.log("❌ [DEBUG] No username found")
-      return null
-    }
-
-    // Extract display name with multiple attempts
-    const displayName = extractDisplayName()
-    console.log("📝 [DEBUG] Display name:", displayName)
-    
-    // Extract bio
-    const bio = extractBio()
-    console.log("📄 [DEBUG] Bio:", bio)
-    
-    // Extract profile picture
-    const profilePicture = extractProfilePicture()
-    console.log("🖼️ [DEBUG] Profile picture URL:", profilePicture ? "Found" : "Not found")
-    
-    // Extract stats
-    const stats = extractStats()
-    console.log("📊 [DEBUG] Stats:", stats)
-    
-    // Check verification and privacy
-    const isVerified = checkVerification()
-    const isPrivate = checkPrivacy()
-    console.log("✓ [DEBUG] Verified:", isVerified, "Private:", isPrivate)
-    
-    const profile: InstagramProfile = {
-      username,
-      displayName: displayName || username,
-      bio: bio || '',
-      profilePicture: profilePicture || '',
-      followers: stats.followers || '0',
-      following: stats.following || '0',
-      posts: stats.posts || '0',
-      isVerified,
-      isPrivate,
-      url: window.location.href,
-      lastUpdated: Date.now()
-    }
-    
-    console.log("✅ [DEBUG] Final profile object:", profile)
-    return profile
-    
-  } catch (error) {
-    console.error("❌ [DEBUG] Error extracting profile data:", error)
+  if (!username || ['explore', 'reels', 'accounts', 'direct', 'p', 'stories', 'tv'].includes(username)) {
+    console.log("❌ [DEBUG] Not a profile page")
     return null
   }
-}
+  
+  // Extract display name from h2 or h1 elements
+  let displayName = username
+  const nameElements = document.querySelectorAll('h1, h2')
+  for (const element of nameElements) {
+    const text = element.textContent?.trim()
+    // Look for text that looks like a name (not stats, not navigation)
+    if (text && text !== username && text.length > 2 && text.length < 50 && 
+        !text.includes('followers') && !text.includes('following') && 
+        !text.includes('posts') && !text.includes('M') && !text.includes('K') &&
+        !text.includes('Tagged') && !text.includes('Reels')) {
+      displayName = text
+      console.log("📝 [DEBUG] Found display name:", displayName)
+      break
+    }
+  }
 
-function extractDisplayName(): string {
-  console.log("🔍 [DEBUG] Extracting display name...")
-  
-  const selectors = [
-    'h2',
-    'h1',
-    'span[dir="auto"]',
-    '[data-testid="user-title"]',
-    'header h1',
-    'header h2',
-    'main header h1',
-    'main header h2'
+  // Extract bio - look more specifically
+  let bio = ''
+  const bioSelectors = [
+    'div[data-testid="user-bio"]',
+    'header section div:last-child',
+    'header div[style*="word"]'
   ]
+  for (const selector of bioSelectors) {
+    const bioElement = document.querySelector(selector)
+    if (bioElement) {
+      const text = bioElement.textContent?.trim()
+      // Bio should be meaningful text, not navigation elements
+      if (text && text.length > 5 && text.length < 300 && 
+          !text.includes('posts') && !text.includes('followers') && 
+          !text.includes('Tagged') && !text.includes('Reels') &&
+          !text.match(/^\d+$/)) {
+        bio = text
+        console.log("📄 [DEBUG] Found bio:", bio.substring(0, 100))
+        break
+      }
+    }
+  }
+
+  // Extract location from bio if available
+  let location = ''
+  const bioText = bio || ''
+  // Look for common location indicators
+  const locationPatterns = [
+    /📍(.+)/,
+    /🌍(.+)/,
+    /📌(.+)/,
+    /(Pakistan|India|USA|UK|Canada|Dubai|Karachi|Lahore|Mumbai|Delhi)/i
+  ]
+
+  for (const pattern of locationPatterns) {
+    const match = bioText.match(pattern)
+    if (match) {
+      location = match[1] ? match[1].trim() : match[0]
+      break
+    }
+  }
+
+  console.log("🌍 [DEBUG] Extracted location:", location)
   
-  for (const selector of selectors) {
-    const elements = document.querySelectorAll(selector)
-    console.log(`🔍 [DEBUG] Selector "${selector}" found ${elements.length} elements`)
-    
-    for (let i = 0; i < elements.length; i++) {
-      const element = elements[i]
-      const text = element.textContent?.trim()
-      console.log(`🔍 [DEBUG] Element ${i} text:`, text)
+  // Extract stats using more specific selectors
+  // Extract stats using more aggressive selectors
+  let posts = '0', followers = '0', following = '0'
+  
+  // Method 1: Look for text patterns in the entire page
+  const allText = document.body.textContent || ''
+  console.log("📊 [DEBUG] Looking for stats in page text...")
+  
+  // Look for "X posts", "X followers", "X following" patterns
+  const postsMatch = allText.match(/(\d+(?:,\d+)*(?:\.\d+)?[KMB]?)\s*posts/i)
+  const followersMatch = allText.match(/(\d+(?:,\d+)*(?:\.\d+)?[KMB]?)\s*followers/i)
+  const followingMatch = allText.match(/(\d+(?:,\d+)*(?:\.\d+)?[KMB]?)\s*following/i)
+  
+  console.log("📊 [DEBUG] RegEx matches:", { postsMatch, followersMatch, followingMatch })
+  
+  if (postsMatch) posts = postsMatch[1]
+  if (followersMatch) followers = followersMatch[1] 
+  if (followingMatch) following = followingMatch[1]
+  
+  // Method 2: If regex fails, look for numbers near the header
+  if (followers === '0') {
+    const headerElement = document.querySelector('header')
+    if (headerElement) {
+      const headerText = headerElement.textContent || ''
+      console.log("📊 [DEBUG] Header text sample:", headerText.substring(0, 200))
       
-      if (text && text.length > 0 && text.length < 100 && !text.includes('@') && !text.includes('posts')) {
-        console.log("✅ [DEBUG] Found display name:", text)
-        return text
+      // Look for large numbers that could be follower counts
+      const largeNumbers = headerText.match(/(\d+(?:\.\d+)?[KM])/g) || []
+      console.log("📊 [DEBUG] Large numbers found:", largeNumbers)
+      
+      if (largeNumbers.length >= 2) {
+        followers = largeNumbers[0] || '0' // Usually followers is first large number
+        following = largeNumbers[1] || '0'
       }
     }
   }
   
-  console.log("❌ [DEBUG] No display name found")
-  return ''
-}
-
-function extractBio(): string {
-  console.log("🔍 [DEBUG] Extracting bio...")
-  // Simplified for now
-  return ''
+  console.log("📊 [DEBUG] Final extracted stats:", { posts, followers, following })
+  
+  // Check for verification badge
+  const isVerified = document.querySelector('svg[aria-label*="Verified"], svg[aria-label*="verified"]') !== null
+  
+  // Check if private
+  const isPrivate = allText.toLowerCase().includes('this account is private')
+  
+  const profile: InstagramProfile = {
+    username,
+    displayName,
+    bio,
+    location,  // Add this line
+    profilePicture: extractProfilePicture(),
+    followers,
+    following,
+    posts,
+    isVerified,
+    isPrivate,
+    url: window.location.href,
+    lastUpdated: Date.now()
+  }
+  
+  console.log("✅ [DEBUG] Final extracted profile:", profile)
+  return profile
 }
 
 function extractProfilePicture(): string {
-  console.log("🔍 [DEBUG] Extracting profile picture...")
+  console.log("🖼️ [DEBUG] Extracting profile picture...")
   
   const selectors = [
     'img[alt*="profile picture"]',
-    'header img',
-    'main header img',
+    'header img[src*="profile"]',
+    'header img:first-of-type',
     'img[style*="border-radius"]'
   ]
   
   for (const selector of selectors) {
     const img = document.querySelector(selector) as HTMLImageElement
-    if (img?.src) {
-      console.log(`🔍 [DEBUG] Found image with selector "${selector}":`, img.src)
-      if (!img.src.includes('static') && img.src.includes('instagram')) {
-        return img.src
-      }
+    if (img?.src && img.src.startsWith('https://') && !img.src.includes('static')) {
+      console.log("✅ [DEBUG] Found profile picture:", img.src.substring(0, 50))
+      return img.src
     }
   }
   
@@ -273,66 +187,52 @@ function extractProfilePicture(): string {
   return ''
 }
 
-function extractStats(): { followers: string; following: string; posts: string } {
-  console.log("🔍 [DEBUG] Extracting stats...")
-  
-  const stats = { followers: '0', following: '0', posts: '0' }
-  
-  // Look for numbers in the page text
-  const allText = document.body.textContent || ''
-  console.log("🔍 [DEBUG] Page text length:", allText.length)
-  
-  // Simple pattern matching for now
-  const numberMatches = allText.match(/(\d+(?:,\d+)*(?:\.\d+)?[kmb]?)/gi) || []
-  console.log("🔍 [DEBUG] Number matches found:", numberMatches.length)
-  
-  if (numberMatches.length >= 3) {
-    stats.posts = numberMatches[0] || '0'
-    stats.followers = numberMatches[1] || '0'
-    stats.following = numberMatches[2] || '0'
-  }
-  
-  console.log("📊 [DEBUG] Extracted stats:", stats)
-  return stats
-}
-
-function checkVerification(): boolean {
-  const hasVerificationBadge = document.querySelector('svg[aria-label*="Verified"]') !== null
-  console.log("✓ [DEBUG] Verification check:", hasVerificationBadge)
-  return hasVerificationBadge
-}
-
-function checkPrivacy(): boolean {
-  const pageText = document.body.textContent || ''
-  const isPrivate = pageText.toLowerCase().includes('this account is private')
-  console.log("🔒 [DEBUG] Privacy check:", isPrivate)
-  return isPrivate
-}
-
-function sendProfileToExtension(profile: InstagramProfile | null) {
-  console.log("📤 [DEBUG] Sending profile to extension:", profile?.username || 'null')
+function sendToBackground(profile: InstagramProfile | null) {
+  console.log("📤 [DEBUG] Sending to background script...")
   
   try {
+    if (!chrome.runtime?.id) {
+      console.log("❌ [DEBUG] Extension context invalidated, skipping message")
+      return
+    }
+    
     chrome.runtime.sendMessage({
       type: 'INSTAGRAM_PROFILE_UPDATE',
       data: profile
-    }).then(response => {
-      console.log("✅ [DEBUG] Extension response:", response)
-    }).catch(error => {
-      console.log("❌ [DEBUG] Extension error:", error)
+    }).then((response) => {
+      console.log("✅ [DEBUG] Background response:", response)
+    }).catch((error) => {
+      console.log("❌ [DEBUG] Background error:", error?.message || error)
     })
-  } catch (error) {
-    console.log("❌ [DEBUG] Failed to send message:", error)
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    console.log("❌ [DEBUG] Failed to send message:", errorMessage)
   }
 }
 
-// Manual trigger for testing
-(window as any).debugInstagramExtraction = () => {
-  console.log("🔍 [DEBUG] Manual extraction triggered")
-  checkForProfile()
+function checkAndSendProfile() {
+  console.log("🔍 [DEBUG] Starting profile check...")
+  const profile = extractSimpleProfile()
+  sendToBackground(profile)
 }
 
-console.log("✅ [DEBUG] Instagram content script setup complete")
-console.log("💡 [DEBUG] You can run 'debugInstagramExtraction()' in console to manually trigger")
+// Test function for manual testing
+(window as any).testInstagram = () => {
+  console.log("🧪 [DEBUG] Manual test triggered!")
+  checkAndSendProfile()
+}
 
-export {}
+// Start after page loads
+setTimeout(() => {
+  console.log("⏰ [DEBUG] Starting profile extraction...")
+  checkAndSendProfile()
+}, 3000)
+
+// Check every 10 seconds
+setInterval(() => {
+  console.log("🔄 [DEBUG] Periodic check...")
+  checkAndSendProfile()
+}, 10000)
+
+console.log("✅ [DEBUG] Instagram setup complete!")
+console.log("💡 [DEBUG] Run 'testInstagram()' in console to test")

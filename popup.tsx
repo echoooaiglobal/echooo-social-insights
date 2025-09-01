@@ -378,14 +378,26 @@ function IndexPopup() {
         <CampaignSelector onCampaignSelect={handleCampaignSelect} />
 
         {/* Instagram Profile Section */}
-        {instagramDisplayData && (
-          <div style={{ padding: '0 16px 16px' }}>
-            <InstagramProfile 
-              profile={instagramDisplayData}
-              onAddToList={handleAddToList}
-              isAddingToList={isAddingToList}
-              selectedCampaignName={selectedCampaign?.name}
-            />
+        {isOnInstagram && (
+          <div>
+            {instagramDisplayData ? (
+              <InstagramProfile
+                profile={instagramDisplayData}
+                onAddToList={handleAddToList}
+                isAddingToList={isAddingToList}
+                selectedCampaignName={selectedCampaign?.name}
+              />
+            ) : (
+              <div style={{
+                padding: '16px',
+                textAlign: 'center',
+                color: '#6b7280',
+                fontSize: '14px'
+              }}>
+                <div style={{ marginBottom: '8px' }}>📱</div>
+                Loading Instagram profile...
+              </div>
+            )}
           </div>
         )}
 

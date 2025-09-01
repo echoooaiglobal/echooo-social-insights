@@ -5,6 +5,7 @@ export interface InstagramProfile {
   username: string
   displayName: string
   bio: string
+  location?: string  // Add this line
   profilePicture: string
   followers: string
   following: string
@@ -27,6 +28,7 @@ export interface ProfileDisplayData {
   username: string
   displayName: string
   bio: string
+  location?: string  // Add this line
   profilePicture: string
   formattedFollowers: string
   formattedFollowing: string
@@ -35,6 +37,8 @@ export interface ProfileDisplayData {
   isPrivate: boolean
   url: string
   canAddToList: boolean
+  engagementRate?: string
+  influenceTier?: string
 }
 
 // Utility type for profile update messages

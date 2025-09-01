@@ -1,5 +1,5 @@
 // background.ts
-// Updated background script with Instagram profile handling
+// Updated background script with Instagram profile handling via Plasmo messaging
 import { Storage } from "@plasmohq/storage"
 import type { PlasmoMessaging } from "@plasmohq/messaging"
 import type { InstagramProfile } from "./src/types/instagram"
@@ -23,7 +23,7 @@ chrome.runtime.onStartup.addListener(async () => {
 })
 
 // ============================================
-// CHROME MESSAGE HANDLERS
+// CHROME MESSAGE HANDLERS (for legacy dashboard injected scripts)
 // ============================================
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -74,23 +74,21 @@ async function handleDashboardAuthFound(authData: any, sendResponse: (response: 
                      userData.email || 'User'),
           email: userData.email,
           companyName: companyData?.name || companyData?.domain || 'Company',
-          companyId: companyData?.id || '',
           isAuthenticated: true,
           lastUpdated: Date.now()
         }
         
         await storage.set('userData', formattedUserData)
-        console.log('✅ Dashboard auth cached successfully:', formattedUserData.fullName)
+        console.log('✅ Dashboard auth cached successfully:', formattedUserData)
         
-        sendResponse({ success: true, userData: formattedUserData })
+        sendResponse({ success: true })
       } catch (parseError) {
         console.error('❌ Error parsing dashboard user data:', parseError)
-        sendResponse({ success: true, warning: 'Auth cached but user data parse failed' })
+        sendResponse({ success: false, error: 'Parse failed' })
       }
     } else {
       sendResponse({ success: true })
     }
-    
   } catch (error) {
     console.error("❌ Error caching dashboard auth:", error)
     sendResponse({ success: false, error: (error as Error).message })
@@ -100,7 +98,7 @@ async function handleDashboardAuthFound(authData: any, sendResponse: (response: 
 // Handle dashboard auth not found
 async function handleDashboardAuthNotFound(sendResponse: (response: any) => void) {
   try {
-    console.log("🧹 No dashboard auth found, clearing cache")
+    console.log("🧹 Clearing dashboard auth cache")
     await storage.remove('dashboardAuth')
     await storage.remove('userData')
     sendResponse({ success: true })
@@ -110,7 +108,7 @@ async function handleDashboardAuthNotFound(sendResponse: (response: any) => void
   }
 }
 
-// Handle Instagram profile updates
+// Handle Instagram profile updates (legacy chrome.runtime.sendMessage)
 async function handleInstagramProfileUpdate(profile: InstagramProfile | null, sendResponse: (response: any) => void) {
   try {
     if (profile) {
@@ -141,19 +139,24 @@ async function handleInstagramProfileUpdate(profile: InstagramProfile | null, se
 }
 
 // ============================================
-// PLASMO MESSAGE HANDLERS (for dashboard content script)
+// PLASMO MESSAGE HANDLERS (for content scripts)
 // ============================================
 
 export const handler: PlasmoMessaging.MessageHandler = async (req, res) => {
   console.log("📨 Plasmo message received:", req.name)
   
   if (req.name === "cache-dashboard-auth") {
-    // Handle regular content script messages from dashboard
+    // Handle dashboard content script messages
     await handleDashboardAuthFound(req.body, (response) => {
       res.send(response)
     })
   } else if (req.name === "clear-dashboard-auth") {
     await handleDashboardAuthNotFound((response) => {
+      res.send(response)
+    })
+  } else if (req.name === "instagram-profile-update") {
+    // Handle Instagram content script messages
+    await handleInstagramProfileUpdate(req.body, (response) => {
       res.send(response)
     })
   } else {

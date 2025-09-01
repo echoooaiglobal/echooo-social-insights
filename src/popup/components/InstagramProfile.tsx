@@ -101,6 +101,27 @@ export function InstagramProfile({
           </div>
         </div>
 
+        {/* Additional Metrics */}
+        <div className="profile-metrics">
+          <div className="metric-item">
+            <span className="metric-label">Engagement Rate</span>
+            <span className="metric-value">{profile.engagementRate || '~2.5%'}</span>
+          </div>
+          
+          <div className="metric-item">
+            <span className="metric-label">Influence Tier</span>
+            <span className="metric-value">{profile.influenceTier || 'Mega Influencer'}</span>
+          </div>
+        </div>
+
+        {/* Location */}
+        {profile.location && (
+          <div className="profile-location">
+            <span className="location-icon">📍</span>
+            <span className="location-text">{profile.location}</span>
+          </div>
+        )}
+
         {/* Bio */}
         {profile.bio && (
           <div className="profile-bio">
