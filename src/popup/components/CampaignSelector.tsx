@@ -1,205 +1,213 @@
 // src/popup/components/CampaignSelector.tsx
 import React, { useState, useEffect } from 'react'
-import { ChevronDown, Folder, Calendar } from 'lucide-react'
-import { getCampaigns } from '../../lib/storage'
-import type { Campaign } from '../../lib/storage'
+import { ChevronDown, Folder, Users, MessageCircle, Calendar, Target, RefreshCw, AlertCircle } from 'lucide-react'
+import { CampaignsService } from '../../services/campaigns'
+import type { Campaign, CampaignDisplay } from '../../types/campaigns'
 
-export function CampaignSelector() {
+interface CampaignSelectorProps {
+  onCampaignSelect?: (campaignId: string, campaign: Campaign) => void
+}
+
+export function CampaignSelector({ onCampaignSelect }: CampaignSelectorProps) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
-  const [selectedCampaign, setSelectedCampaign] = useState<string>('')
-  const [isOpen, setIsOpen] = useState(false)
+  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null)
+  const [selectedDisplay, setSelectedDisplay] = useState<CampaignDisplay | null>(null)
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const campaignsService = new CampaignsService()
 
   useEffect(() => {
     loadCampaigns()
   }, [])
 
-  const loadCampaigns = async () => {
+  const loadCampaigns = async (forceRefresh = false) => {
     try {
-      const campaignData = await getCampaigns()
-      setCampaigns(campaignData)
+      setLoading(!forceRefresh)
+      setRefreshing(forceRefresh)
+      setError(null)
       
-      if (campaignData.length > 0) {
-        setSelectedCampaign(campaignData[0].id)
+      console.log('🔄 [CampaignSelector] Loading campaigns...')
+      
+      const campaignsList = await campaignsService.getCampaigns(forceRefresh)
+      console.log(`✅ [CampaignSelector] Loaded ${campaignsList.length} campaigns`)
+      
+      setCampaigns(campaignsList)
+      
+      // Auto-select first campaign if available
+      if (campaignsList.length > 0 && !selectedCampaign) {
+        handleCampaignSelect(campaignsList[0])
+      } else if (campaignsList.length === 0) {
+        setSelectedCampaign(null)
+        setSelectedDisplay(null)
       }
-    } catch (error) {
-      console.error('Failed to load campaigns:', error)
+      
+    } catch (err) {
+      console.error('❌ [CampaignSelector] Error loading campaigns:', err)
+      setError('Failed to load campaigns')
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }
 
-  const selectedCampaignData = campaigns.find(c => c.id === selectedCampaign)
+  const handleCampaignSelect = (campaign: Campaign) => {
+    try {
+      console.log('✅ [CampaignSelector] Campaign selected:', campaign.name)
+      
+      setSelectedCampaign(campaign)
+      setIsDropdownOpen(false)
+      
+      // Format campaign for display
+      const displayData = campaignsService.formatCampaignForDisplay(campaign)
+      setSelectedDisplay(displayData)
+      
+      // Save selection and notify parent
+      campaignsService.saveSelectedCampaign(campaign.id)
+      onCampaignSelect?.(campaign.id, campaign)
+      
+    } catch (error) {
+      console.error('❌ [CampaignSelector] Error selecting campaign:', error)
+    }
+  }
 
+  const handleRefresh = async () => {
+    console.log('🔄 [CampaignSelector] Manual refresh triggered')
+    await loadCampaigns(true)
+  }
+
+  // Loading state
   if (loading) {
     return (
-      <div style={{ padding: '16px' }}>
-        <div style={{
-          animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
-        }}>
-          <div style={{
-            height: '16px',
-            backgroundColor: '#e5e7eb',
-            borderRadius: '4px',
-            width: '25%',
-            marginBottom: '8px'
-          }}></div>
-          <div style={{
-            height: '32px',
-            backgroundColor: '#e5e7eb',
-            borderRadius: '6px'
-          }}></div>
+      <div className="campaign-selector-container">
+        <div className="loading-container">
+          <div className="loading-spinner" />
+          <span className="loading-text">Loading campaigns...</span>
         </div>
       </div>
     )
   }
 
+  // Error state
+  if (error) {
+    return (
+      <div className="campaign-selector-container">
+        <div className="error-container">
+          <AlertCircle size={20} className="error-icon" />
+          <div className="error-message">{error}</div>
+          <button onClick={handleRefresh} className="retry-button">
+            <RefreshCw size={14} />
+            Retry
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // No campaigns state
   if (campaigns.length === 0) {
     return (
-      <div style={{
-        padding: '16px',
-        textAlign: 'center'
-      }}>
-        <Folder size={32} color="#9ca3af" style={{ margin: '0 auto 8px' }} />
-        <p style={{
-          fontSize: '14px',
-          color: '#6b7280',
-          margin: 0
-        }}>
-          No campaigns found
-        </p>
+      <div className="campaign-selector-container">
+        <div className="no-campaigns-container">
+          <Folder size={32} className="no-campaigns-icon" />
+          <div className="no-campaigns-text">No campaigns found</div>
+          <button onClick={handleRefresh} className="refresh-link">
+            Refresh
+          </button>
+        </div>
       </div>
     )
   }
 
   return (
-    <div style={{ padding: '16px' }}>
-      <label style={{
-        display: 'block',
-        fontSize: '12px',
-        fontWeight: '500',
-        color: '#374151',
-        marginBottom: '8px'
-      }}>
-        Select Campaign
-      </label>
-      
-      <div style={{ position: 'relative' }}>
-        <button
-          onClick={() => setIsOpen(!isOpen)}
-          style={{
-            width: '100%',
-            backgroundColor: 'white',
-            border: '1px solid #d1d5db',
-            borderRadius: '6px',
-            padding: '12px',
-            textAlign: 'left',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            cursor: 'pointer',
-            transition: 'border-color 0.2s ease'
-          }}
-          onMouseOver={(e) => (e.target as HTMLElement).style.borderColor = '#9ca3af'}
-          onMouseOut={(e) => (e.target as HTMLElement).style.borderColor = '#d1d5db'}
-        >
-          <div style={{
-            display: 'flex',
-            alignItems: 'center'
-          }}>
-            <Folder size={16} color="#9ca3af" style={{ marginRight: '8px' }} />
-            <span style={{
-              fontSize: '14px',
-              color: '#111827',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis'
-            }}>
-              {selectedCampaignData?.name || 'Select a campaign'}
+    <div className="campaign-selector-container">
+      {/* Campaign Selector Dropdown */}
+      <div className="dropdown-container">
+        <label className="dropdown-label">
+          Select Campaign
+        </label>
+        
+        <div className="dropdown-wrapper">
+          <button
+            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            className="dropdown-button"
+            disabled={refreshing}
+          >
+            <span className="dropdown-text">
+              {selectedCampaign ? selectedCampaign.name : 'Choose a campaign...'}
             </span>
-          </div>
-          <ChevronDown 
-            size={16} 
-            color="#9ca3af" 
-            style={{
-              transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-              transition: 'transform 0.2s ease'
-            }}
-          />
-        </button>
+            <div className="dropdown-icon-container">
+              {refreshing ? (
+                <RefreshCw size={16} className="refresh-icon spinning" />
+              ) : (
+                <ChevronDown 
+                  size={16} 
+                  className={`dropdown-icon ${isDropdownOpen ? 'rotated' : ''}`}
+                />
+              )}
+            </div>
+          </button>
 
-        {isOpen && (
-          <div style={{
-            position: 'absolute',
-            zIndex: 10,
-            width: '100%',
-            marginTop: '4px',
-            backgroundColor: 'white',
-            border: '1px solid #d1d5db',
-            borderRadius: '6px',
-            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-            maxHeight: '192px',
-            overflowY: 'auto'
-          }}>
-            {campaigns.map((campaign) => (
-              <button
-                key={campaign.id}
-                onClick={() => {
-                  setSelectedCampaign(campaign.id)
-                  setIsOpen(false)
-                }}
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  textAlign: 'left',
-                  display: 'flex',
-                  alignItems: 'center',
-                  border: 'none',
-                  background: 'white',
-                  cursor: 'pointer',
-                  transition: 'background-color 0.2s ease'
-                }}
-                onMouseOver={(e) => (e.target as HTMLElement).style.backgroundColor = '#f9fafb'}
-                onMouseOut={(e) => (e.target as HTMLElement).style.backgroundColor = 'white'}
-              >
-                <Folder size={16} color="#9ca3af" style={{ marginRight: '8px' }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    fontSize: '14px',
-                    color: '#111827',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis'
-                  }}>
-                    {campaign.name}
-                  </div>
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    fontSize: '12px',
-                    color: '#6b7280',
-                    marginTop: '2px'
-                  }}>
-                    <Calendar size={12} style={{ marginRight: '4px' }} />
-                    {new Date(campaign.createdAt).toLocaleDateString()}
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
+          {/* Dropdown Menu */}
+          {isDropdownOpen && (
+            <div className="dropdown-menu">
+              {campaigns.map((campaign) => (
+                <button
+                  key={campaign.id}
+                  onClick={() => handleCampaignSelect(campaign)}
+                  className={`dropdown-item ${selectedCampaign?.id === campaign.id ? 'selected' : ''}`}
+                >
+                  <div className="dropdown-item-name">{campaign.name}</div>
+                  <div className="dropdown-item-brand">{campaign.brand_name}</div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
-      {selectedCampaignData && (
-        <div style={{
-          marginTop: '12px',
-          padding: '8px',
-          backgroundColor: '#f9fafb',
-          borderRadius: '4px',
-          fontSize: '12px',
-          color: '#6b7280'
-        }}>
-          <strong>Status:</strong> {selectedCampaignData.status}
+      {/* Selected Campaign Details */}
+      {selectedDisplay && (
+        <div className="campaign-details">
+          <div className="campaign-header">
+            <h3 className="campaign-brand">{selectedDisplay.brandName}</h3>
+            <span 
+              className="campaign-status"
+              style={{ backgroundColor: selectedDisplay.statusColor }}
+            >
+              {selectedDisplay.status}
+            </span>
+          </div>
+
+          {/* Campaign Stats Grid */}
+          <div className="campaign-stats">
+            <div className="stat-item">
+              <Users size={14} className="stat-icon" />
+              <span className="stat-text">{selectedDisplay.totalInfluencers} influencers</span>
+            </div>
+            
+            <div className="stat-item">
+              <MessageCircle size={14} className="stat-icon" />
+              <span className="stat-text">{selectedDisplay.totalContacted} contacted</span>
+            </div>
+            
+            <div className="stat-item">
+              <Target size={14} className="stat-icon" />
+              <span className="stat-text">{selectedDisplay.totalOnboarded} onboarded</span>
+            </div>
+            
+            <div className="stat-item">
+              <Calendar size={14} className="stat-icon" />
+              <span className="stat-text">{selectedDisplay.formattedDate}</span>
+            </div>
+          </div>
+
+          {/* Category */}
+          <div className="campaign-category">
+            {selectedDisplay.category}
+          </div>
         </div>
       )}
     </div>

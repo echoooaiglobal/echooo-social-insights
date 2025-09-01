@@ -92,8 +92,8 @@ export const REQUIRED_PERMISSIONS = [
 
 // Host permissions for your dashboard
 export const HOST_PERMISSIONS = [
-  'https://yourdashboard.com/*',
-  'https://api.yourdashboard.com/*',
+  // 'https://yourdashboard.com/*',
+  // 'https://api.yourdashboard.com/*',
   'http://localhost:3000/*',    // Development dashboard
   'http://localhost:8000/*'     // Development API
 ] as const

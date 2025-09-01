@@ -72,7 +72,7 @@ async function checkDashboardAuth() {
                 console.error('❌ Error extracting dashboard auth:', error)
                 chrome.runtime.sendMessage({
                   type: 'DASHBOARD_AUTH_ERROR',
-                  error: error.message
+                  error: error instanceof Error ? error.message : String(error)
                 })
               }
             }

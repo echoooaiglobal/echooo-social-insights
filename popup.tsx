@@ -1,19 +1,25 @@
-// popup.tsx (place this in root directory)
+// popup.tsx - Fixed popup that works with existing auth flow
 import React, { useState, useEffect } from 'react'
 import { LoginButton } from './src/popup/components/LoginButton'
 import { LoadingSpinner } from './src/popup/components/LoadingSpinner'
-import { UserProfile } from './src/popup/components/UserProfile'
 import { CampaignSelector } from './src/popup/components/CampaignSelector'
-import { checkAuthentication, getCachedUserData, logout, openLoginPage, refreshAuthFromDashboard } from './src/lib/auth'
-import type { UserData } from './src/lib/storage'
+import { AuthService } from './src/services/auth'
+import type { UserData } from './src/types/auth'
+import type { Campaign } from './src/types/campaigns'
 import './src/popup/styles.css'
+import './src/popup/components/CampaignSelector.css'
 
 function IndexPopup() {
+  // State management
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [userData, setUserData] = useState<UserData | null>(null)
+  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null)
   const [loading, setLoading] = useState(true)
   const [loginLoading, setLoginLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+
+  // Services
+  const authService = new AuthService()
 
   useEffect(() => {
     initializePopup()
@@ -21,19 +27,20 @@ function IndexPopup() {
 
   const initializePopup = async () => {
     try {
-      console.log('🚀 Initializing popup...')
+      console.log('🚀 [Popup] Initializing popup...')
       
-      // Check authentication status (simple, no proactive checking)
-      const authStatus = await checkAuthentication()
+      // Check authentication status
+      const authStatus = await authService.isAuthenticated()
       setIsAuthenticated(authStatus)
       
       if (authStatus) {
         // Get user data if authenticated
-        const cachedData = await getCachedUserData()
-        setUserData(cachedData)
+        const cachedUserData = await authService.getUserData()
+        setUserData(cachedUserData)
+        console.log('✅ [Popup] User data loaded:', cachedUserData?.fullName)
       }
     } catch (error) {
-      console.error('❌ Failed to initialize popup:', error)
+      console.error('❌ [Popup] Failed to initialize popup:', error)
       setIsAuthenticated(false)
     } finally {
       setLoading(false)
@@ -43,14 +50,14 @@ function IndexPopup() {
   const handleLogin = async () => {
     try {
       setLoginLoading(true)
-      await openLoginPage()
+      await authService.openLoginPage()
       
       // Close popup after opening login page
       setTimeout(() => {
         window.close()
       }, 500)
     } catch (error) {
-      console.error('❌ Failed to open login page:', error)
+      console.error('❌ [Popup] Failed to open login page:', error)
     } finally {
       setLoginLoading(false)
     }
@@ -59,23 +66,23 @@ function IndexPopup() {
   const handleRefresh = async () => {
     try {
       setRefreshing(true)
-      console.log('🔄 Manual refresh triggered by user')
+      console.log('🔄 [Popup] Manual refresh triggered')
       
-      // Trigger background auth check
-      const authFound = await refreshAuthFromDashboard()
+      // Try to refresh auth from dashboard
+      const authFound = await authService.refreshFromDashboard()
       
       if (authFound) {
-        console.log('✅ Auth found after refresh')
+        console.log('✅ [Popup] Auth refreshed successfully')
         setIsAuthenticated(true)
-        const userData = await getCachedUserData()
-        setUserData(userData)
+        const refreshedUserData = await authService.getUserData()
+        setUserData(refreshedUserData)
       } else {
-        console.log('❌ No auth found after refresh')
+        console.log('❌ [Popup] No auth found during refresh')
         setIsAuthenticated(false)
         setUserData(null)
       }
     } catch (error) {
-      console.error('❌ Failed to refresh:', error)
+      console.error('❌ [Popup] Failed to refresh:', error)
     } finally {
       setRefreshing(false)
     }
@@ -83,23 +90,36 @@ function IndexPopup() {
 
   const handleLogout = async () => {
     try {
-      await logout()
+      console.log('🚪 [Popup] Logging out...')
+      await authService.clearAuthData()
       setIsAuthenticated(false)
       setUserData(null)
+      setSelectedCampaign(null)
     } catch (error) {
-      console.error('❌ Failed to logout:', error)
+      console.error('❌ [Popup] Failed to logout:', error)
     }
   }
 
   const handleDataRefresh = async () => {
     try {
       setLoading(true)
-      const refreshedData = await getCachedUserData(true) // Force refresh
-      setUserData(refreshedData)
+      console.log('🔄 [Popup] Refreshing user data...')
+      
+      const refreshedUserData = await authService.getUserData()
+      setUserData(refreshedUserData)
     } catch (error) {
-      console.error('❌ Failed to refresh data:', error)
+      console.error('❌ [Popup] Failed to refresh user data:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleCampaignSelect = async (campaignId: string, campaign: Campaign) => {
+    try {
+      console.log('🎯 [Popup] Campaign selected:', campaign.name)
+      setSelectedCampaign(campaign)
+    } catch (error) {
+      console.error('❌ [Popup] Error handling campaign selection:', error)
     }
   }
 
@@ -119,7 +139,7 @@ function IndexPopup() {
     flexDirection: 'column'
   }
 
-  // Show loading spinner while initializing (but not forever)
+  // Loading state
   if (loading && isAuthenticated === null) {
     return (
       <div style={containerStyle}>
@@ -128,7 +148,7 @@ function IndexPopup() {
     )
   }
 
-  // Show login screen if not authenticated
+  // Login state
   if (!isAuthenticated) {
     return (
       <div style={containerStyle}>
@@ -142,7 +162,7 @@ function IndexPopup() {
     )
   }
 
-  // Show main popup content if authenticated
+  // Authenticated state
   return (
     <div style={containerStyle}>
       {/* Header */}
@@ -189,13 +209,105 @@ function IndexPopup() {
 
       {/* Content Area */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
-        {/* User Profile Section */}
+        {/* User Profile Section - Compact */}
         {userData && (
-          <UserProfile userData={userData} onLogout={handleLogout} />
+          <div style={{
+            padding: '12px 16px',
+            borderBottom: '1px solid #e5e7eb',
+            backgroundColor: '#fafafa'
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center'
+              }}>
+                <div style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  backgroundColor: '#dbeafe',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginRight: '10px'
+                }}>
+                  <svg width="16" height="16" fill="#2563eb" viewBox="0 0 24 24">
+                    <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                  </svg>
+                </div>
+                <div>
+                  <div style={{
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    color: '#111827'
+                  }}>
+                    {userData.fullName}
+                  </div>
+                  <div style={{
+                    fontSize: '12px',
+                    color: '#6b7280'
+                  }}>
+                    {userData.companyName}
+                  </div>
+                </div>
+              </div>
+              
+              <button
+                onClick={handleLogout}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: '11px',
+                  backgroundColor: 'transparent',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '4px',
+                  color: '#6b7280',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+                title="Logout"
+                onMouseOver={(e) => {
+                  (e.target as HTMLElement).style.backgroundColor = '#f3f4f6'
+                  ;(e.target as HTMLElement).style.color = '#374151'
+                }}
+                onMouseOut={(e) => {
+                  (e.target as HTMLElement).style.backgroundColor = 'transparent'
+                  ;(e.target as HTMLElement).style.color = '#6b7280'
+                }}
+              >
+                <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                Logout
+              </button>
+            </div>
+          </div>
         )}
 
         {/* Campaign Selector */}
-        <CampaignSelector />
+        <CampaignSelector onCampaignSelect={handleCampaignSelect} />
+
+        {/* Future: Instagram Profile Detection Section */}
+        {selectedCampaign && (
+          <div style={{
+            padding: '16px',
+            borderTop: '1px solid #e5e7eb',
+            backgroundColor: '#f8fafc'
+          }}>
+            <div style={{
+              fontSize: '12px',
+              color: '#6b7280',
+              textAlign: 'center'
+            }}>
+              Visit an Instagram profile to add influencers to your selected campaign
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Footer */}

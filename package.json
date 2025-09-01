@@ -28,8 +28,6 @@
   },
   "manifest": {
     "host_permissions": [
-      "https://yourdashboard.com/*",
-      "https://api.yourdashboard.com/*",
       "http://localhost:3000/*",
       "http://localhost:8000/*"
     ],
