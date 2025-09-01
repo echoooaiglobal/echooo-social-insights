@@ -1,28 +1,42 @@
-// popup.tsx - Fixed popup that works with existing auth flow
+// popup.tsx - Final popup with Instagram profile integration
 import React, { useState, useEffect } from 'react'
 import { LoginButton } from './src/popup/components/LoginButton'
 import { LoadingSpinner } from './src/popup/components/LoadingSpinner'
 import { CampaignSelector } from './src/popup/components/CampaignSelector'
+import { InstagramProfile } from './src/popup/components/InstagramProfile'
 import { AuthService } from './src/services/auth'
+import { InstagramService } from './src/services/instagram'
 import type { UserData } from './src/types/auth'
 import type { Campaign } from './src/types/campaigns'
+import type { InstagramProfile as InstagramProfileType, ProfileDisplayData } from './src/types/instagram'
 import './src/popup/styles.css'
 import './src/popup/components/CampaignSelector.css'
+import './src/popup/components/InstagramProfile.css'
 
 function IndexPopup() {
-  // State management
+  // Auth state
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [userData, setUserData] = useState<UserData | null>(null)
-  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null)
   const [loading, setLoading] = useState(true)
   const [loginLoading, setLoginLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
 
+  // Campaign state
+  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null)
+
+  // Instagram state
+  const [instagramProfile, setInstagramProfile] = useState<InstagramProfileType | null>(null)
+  const [instagramDisplayData, setInstagramDisplayData] = useState<ProfileDisplayData | null>(null)
+  const [isOnInstagram, setIsOnInstagram] = useState(false)
+  const [isAddingToList, setIsAddingToList] = useState(false)
+
   // Services
   const authService = new AuthService()
+  const instagramService = new InstagramService()
 
   useEffect(() => {
     initializePopup()
+    setupInstagramProfileListener()
   }, [])
 
   const initializePopup = async () => {
@@ -39,11 +53,58 @@ function IndexPopup() {
         setUserData(cachedUserData)
         console.log('✅ [Popup] User data loaded:', cachedUserData?.fullName)
       }
+
+      // Check if on Instagram and load current profile
+      const onInstagram = await instagramService.isOnInstagram()
+      setIsOnInstagram(onInstagram)
+
+      if (onInstagram && authStatus) {
+        await loadInstagramProfile()
+      }
     } catch (error) {
       console.error('❌ [Popup] Failed to initialize popup:', error)
       setIsAuthenticated(false)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const setupInstagramProfileListener = () => {
+    // Listen for Instagram profile updates from content script
+    const messageListener = (message: any, sender: any, sendResponse: any) => {
+      if (message.type === 'INSTAGRAM_PROFILE_UPDATE') {
+        console.log('📱 [Popup] Instagram profile update received')
+        handleInstagramProfileUpdate(message.data)
+      }
+    }
+
+    chrome.runtime.onMessage.addListener(messageListener)
+
+    // Cleanup listener on unmount
+    return () => {
+      chrome.runtime.onMessage.removeListener(messageListener)
+    }
+  }
+
+  const loadInstagramProfile = async () => {
+    try {
+      const profile = await instagramService.getCurrentProfile()
+      handleInstagramProfileUpdate(profile)
+    } catch (error) {
+      console.error('❌ [Popup] Failed to load Instagram profile:', error)
+    }
+  }
+
+  const handleInstagramProfileUpdate = (profile: InstagramProfileType | null) => {
+    setInstagramProfile(profile)
+    
+    if (profile) {
+      const displayData = instagramService.formatProfileForDisplay(profile)
+      setInstagramDisplayData(displayData)
+      console.log('✅ [Popup] Instagram profile updated:', profile.username)
+    } else {
+      setInstagramDisplayData(null)
+      console.log('❌ [Popup] Instagram profile cleared')
     }
   }
 
@@ -120,6 +181,30 @@ function IndexPopup() {
       setSelectedCampaign(campaign)
     } catch (error) {
       console.error('❌ [Popup] Error handling campaign selection:', error)
+    }
+  }
+
+  const handleAddToList = async (username: string) => {
+    try {
+      setIsAddingToList(true)
+      console.log('➕ [Popup] Adding to list:', username, 'Campaign:', selectedCampaign?.name)
+      
+      // TODO: Implement API call to add influencer to campaign list
+      // This will be implemented in the next phase
+      
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1500))
+      
+      console.log('✅ [Popup] Successfully added to list:', username)
+      
+      // Show success message (you can add a toast notification here)
+      alert(`Successfully added @${username} to ${selectedCampaign?.name}!`)
+      
+    } catch (error) {
+      console.error('❌ [Popup] Failed to add to list:', error)
+      alert('Failed to add to list. Please try again.')
+    } finally {
+      setIsAddingToList(false)
     }
   }
 
@@ -272,12 +357,12 @@ function IndexPopup() {
                 }}
                 title="Logout"
                 onMouseOver={(e) => {
-                  (e.target as HTMLElement).style.backgroundColor = '#f3f4f6'
-                  ;(e.target as HTMLElement).style.color = '#374151'
+                  (e.target as HTMLElement).style.backgroundColor = '#f3f4f6';
+                  (e.target as HTMLElement).style.color = '#374151'
                 }}
                 onMouseOut={(e) => {
-                  (e.target as HTMLElement).style.backgroundColor = 'transparent'
-                  ;(e.target as HTMLElement).style.color = '#6b7280'
+                  (e.target as HTMLElement).style.backgroundColor = 'transparent';
+                  (e.target as HTMLElement).style.color = '#6b7280'
                 }}
               >
                 <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -292,8 +377,20 @@ function IndexPopup() {
         {/* Campaign Selector */}
         <CampaignSelector onCampaignSelect={handleCampaignSelect} />
 
-        {/* Future: Instagram Profile Detection Section */}
-        {selectedCampaign && (
+        {/* Instagram Profile Section */}
+        {instagramDisplayData && (
+          <div style={{ padding: '0 16px 16px' }}>
+            <InstagramProfile 
+              profile={instagramDisplayData}
+              onAddToList={handleAddToList}
+              isAddingToList={isAddingToList}
+              selectedCampaignName={selectedCampaign?.name}
+            />
+          </div>
+        )}
+
+        {/* Instructions */}
+        {!instagramDisplayData && selectedCampaign && (
           <div style={{
             padding: '16px',
             borderTop: '1px solid #e5e7eb',

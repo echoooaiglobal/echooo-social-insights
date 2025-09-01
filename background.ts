@@ -1,11 +1,12 @@
 // background.ts
-// Simplified background script - no infinite loops
+// Updated background script with Instagram profile handling
 import { Storage } from "@plasmohq/storage"
 import type { PlasmoMessaging } from "@plasmohq/messaging"
+import type { InstagramProfile } from "./src/types/instagram"
 
 const storage = new Storage()
 
-console.log("🚀 Echooo Extension background script loaded (Simplified)")
+console.log("🚀 Echooo Extension background script loaded")
 
 // Handle extension installation
 chrome.runtime.onInstalled.addListener(async (details) => {
@@ -16,94 +17,19 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   }
 })
 
-// ============================================
-// SIMPLE AUTH CHECKING FUNCTION
-// ============================================
-
-async function checkDashboardAuth() {
-  try {
-    console.log("🔍 Checking for existing dashboard authentication...")
-    
-    const dashboardUrl = process.env.PLASMO_PUBLIC_DASHBOARD_URL || 'http://localhost:3000'
-    
-    // Find existing dashboard tabs
-    const tabs = await chrome.tabs.query({ url: `${dashboardUrl}/*` })
-    
-    if (tabs.length > 0) {
-      console.log(`📍 Found ${tabs.length} dashboard tab(s)`)
-      
-      // Inject script into the first dashboard tab found
-      const tab = tabs[0]
-      if (tab.id) {
-        try {
-          await chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            func: () => {
-              // Extract auth data from dashboard localStorage
-              try {
-                const accessToken = localStorage.getItem('accessToken')
-                const refreshToken = localStorage.getItem('refreshToken') 
-                const tokenExpiry = localStorage.getItem('tokenExpiry')
-                const user = localStorage.getItem('user')
-                const company = localStorage.getItem('company')
-                const roles = localStorage.getItem('roles')
-
-                if (accessToken && user) {
-                  // Send auth data to background script
-                  chrome.runtime.sendMessage({
-                    type: 'DASHBOARD_AUTH_FOUND',
-                    data: {
-                      accessToken,
-                      refreshToken,
-                      tokenExpiry, 
-                      user,
-                      company,
-                      roles
-                    }
-                  })
-                  console.log('✅ Dashboard auth data sent to background')
-                } else {
-                  chrome.runtime.sendMessage({
-                    type: 'DASHBOARD_AUTH_NOT_FOUND'
-                  })
-                  console.log('❌ No dashboard auth data found')
-                }
-              } catch (error) {
-                console.error('❌ Error extracting dashboard auth:', error)
-                chrome.runtime.sendMessage({
-                  type: 'DASHBOARD_AUTH_ERROR',
-                  error: error instanceof Error ? error.message : String(error)
-                })
-              }
-            }
-          })
-          console.log(`✅ Auth check script injected into tab ${tab.id}`)
-        } catch (error) {
-          console.log(`⚠️ Failed to inject script into tab ${tab.id}:`, error)
-        }
-      }
-    } else {
-      console.log("📭 No dashboard tabs found")
-    }
-  } catch (error) {
-    console.error("❌ Error checking dashboard auth:", error)
-  }
-}
+// Handle extension startup
+chrome.runtime.onStartup.addListener(async () => {
+  console.log("🔄 Extension starting up...")
+})
 
 // ============================================
 // CHROME MESSAGE HANDLERS
 // ============================================
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log("📨 Chrome message received:", message.type)
+  console.log("📨 Background received message:", message.type)
   
   switch (message.type) {
-    case 'TRIGGER_AUTH_CHECK':
-      console.log('📡 Manual auth check triggered')
-      checkDashboardAuth()
-      sendResponse({ success: true })
-      break
-      
     case 'DASHBOARD_AUTH_FOUND':
       handleDashboardAuthFound(message.data, sendResponse)
       return true
@@ -112,16 +38,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       handleDashboardAuthNotFound(sendResponse)
       return true
       
-    case 'DASHBOARD_AUTH_ERROR':
-      console.error('❌ Dashboard auth error:', message.error)
-      sendResponse({ success: false, error: message.error })
-      break
+    case 'INSTAGRAM_PROFILE_UPDATE':
+      handleInstagramProfileUpdate(message.data, sendResponse)
+      return true
       
     default:
-      sendResponse({ success: false, error: 'Unknown message type' })
+      console.warn("⚠️ Unknown message type:", message.type)
+      sendResponse({ success: false, error: "Unknown message type" })
   }
 })
 
+// Handle dashboard auth found
 async function handleDashboardAuthFound(authData: any, sendResponse: (response: any) => void) {
   try {
     console.log("💾 Caching dashboard auth data:", {
@@ -147,27 +74,30 @@ async function handleDashboardAuthFound(authData: any, sendResponse: (response: 
                      userData.email || 'User'),
           email: userData.email,
           companyName: companyData?.name || companyData?.domain || 'Company',
+          companyId: companyData?.id || '',
           isAuthenticated: true,
           lastUpdated: Date.now()
         }
         
         await storage.set('userData', formattedUserData)
-        console.log('✅ Dashboard auth cached successfully:', formattedUserData)
+        console.log('✅ Dashboard auth cached successfully:', formattedUserData.fullName)
         
         sendResponse({ success: true, userData: formattedUserData })
       } catch (parseError) {
         console.error('❌ Error parsing dashboard user data:', parseError)
-        sendResponse({ success: true, warning: 'Auth cached but parse failed' })
+        sendResponse({ success: true, warning: 'Auth cached but user data parse failed' })
       }
     } else {
       sendResponse({ success: true })
     }
+    
   } catch (error) {
     console.error("❌ Error caching dashboard auth:", error)
     sendResponse({ success: false, error: (error as Error).message })
   }
 }
 
+// Handle dashboard auth not found
 async function handleDashboardAuthNotFound(sendResponse: (response: any) => void) {
   try {
     console.log("🧹 No dashboard auth found, clearing cache")
@@ -180,15 +110,45 @@ async function handleDashboardAuthNotFound(sendResponse: (response: any) => void
   }
 }
 
+// Handle Instagram profile updates
+async function handleInstagramProfileUpdate(profile: InstagramProfile | null, sendResponse: (response: any) => void) {
+  try {
+    if (profile) {
+      console.log("📊 Instagram profile detected:", {
+        username: profile.username,
+        displayName: profile.displayName,
+        followers: profile.followers,
+        isVerified: profile.isVerified,
+        isPrivate: profile.isPrivate
+      })
+      
+      // Store current Instagram profile
+      await storage.set('currentInstagramProfile', profile)
+      
+      sendResponse({ success: true, profile })
+    } else {
+      console.log("❌ Instagram profile cleared")
+      
+      // Clear stored profile
+      await storage.remove('currentInstagramProfile')
+      
+      sendResponse({ success: true, profile: null })
+    }
+  } catch (error) {
+    console.error("❌ Error handling Instagram profile update:", error)
+    sendResponse({ success: false, error: (error as Error).message })
+  }
+}
+
 // ============================================
-// PLASMO MESSAGE HANDLERS (for content script)
+// PLASMO MESSAGE HANDLERS (for dashboard content script)
 // ============================================
 
 export const handler: PlasmoMessaging.MessageHandler = async (req, res) => {
   console.log("📨 Plasmo message received:", req.name)
   
   if (req.name === "cache-dashboard-auth") {
-    // Handle regular content script messages
+    // Handle regular content script messages from dashboard
     await handleDashboardAuthFound(req.body, (response) => {
       res.send(response)
     })
@@ -210,9 +170,10 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     const dashboardUrl = process.env.PLASMO_PUBLIC_DASHBOARD_URL || 'http://localhost:3000'
     
     if (tab.url.startsWith(dashboardUrl)) {
-      console.log("🔍 Dashboard page detected, checking auth in 2 seconds...")
-      // Wait a bit for page to load, then check auth
-      setTimeout(checkDashboardAuth, 2000)
+      console.log("🔍 Dashboard page detected")
+    } else if (tab.url.includes('instagram.com')) {
+      console.log("📱 Instagram page detected")
+      // Instagram content script will handle profile detection
     }
   }
 })
