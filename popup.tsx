@@ -185,24 +185,30 @@ function IndexPopup() {
   }
 
   const handleAddToList = async (username: string) => {
+    if (!selectedCampaign || isAddingToList) return
+
     try {
       setIsAddingToList(true)
-      console.log('➕ [Popup] Adding to list:', username, 'Campaign:', selectedCampaign?.name)
+      console.log('➕ [Popup] Adding to list:', username, selectedCampaign.name)
+
+      const { InstagramApiService } = await import('./src/services/instagram-api')
+      const instagramApiService = new InstagramApiService()
       
-      // TODO: Implement API call to add influencer to campaign list
-      // This will be implemented in the next phase
+      const result = await instagramApiService.addToList(username, selectedCampaign.campaign_lists[0].id)
       
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      
-      console.log('✅ [Popup] Successfully added to list:', username)
-      
-      // Show success message (you can add a toast notification here)
-      alert(`Successfully added @${username} to ${selectedCampaign?.name}!`)
-      
+      if (result.success) {
+        console.log('✅ [Popup] Successfully added to campaign')
+        
+        // Show success message (you can enhance this with a toast notification)
+        alert(`Successfully added @${username} to ${selectedCampaign.name}!`)
+      } else {
+        console.error('❌ [Popup] Failed to add to list:', result.error)
+        alert(`Failed to add to campaign: ${result.error}`)
+      }
+
     } catch (error) {
-      console.error('❌ [Popup] Failed to add to list:', error)
-      alert('Failed to add to list. Please try again.')
+      console.error('❌ [Popup] Error in add to list:', error)
+      alert('An error occurred while adding to campaign')
     } finally {
       setIsAddingToList(false)
     }
