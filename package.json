@@ -37,7 +37,8 @@
       "storage",
       "cookies",
       "activeTab",
-      "scripting"
+      "scripting",
+      "tabs"
     ],
     "content_scripts": [
       {
